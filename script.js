@@ -372,20 +372,26 @@ const INITIAL_ACTIVITIES = [
 // 2. LocalStorage Persistence Manager
 // ==========================================================================
 const DB = {
+  _mem: {},
   get(key, defaultValue) {
     try {
       const data = localStorage.getItem(`medicare_${key}`);
-      return data ? JSON.parse(data) : defaultValue;
+      if (data !== null) {
+        return JSON.parse(data);
+      }
+      return this._mem[key] !== undefined ? this._mem[key] : defaultValue;
     } catch (e) {
-      console.error("Storage error:", e);
-      return defaultValue;
+      console.warn("Storage read error, using memory store:", e);
+      return this._mem[key] !== undefined ? this._mem[key] : defaultValue;
     }
   },
   set(key, value) {
     try {
+      this._mem[key] = value;
       localStorage.setItem(`medicare_${key}`, JSON.stringify(value));
     } catch (e) {
-      console.error("Storage save error:", e);
+      console.warn("Storage save error, retained in memory store:", e);
+      this._mem[key] = value;
     }
   },
   init() {
@@ -416,6 +422,60 @@ const DB = {
   }
 };
 
+// Form Draft Auto-Save Manager to prevent accidental data loss on refresh
+const FormDraftManager = {
+  saveDraft(formId) {
+    try {
+      const form = document.getElementById(formId);
+      if (!form) return;
+      const data = {};
+      const inputs = form.querySelectorAll("input:not([type=hidden]):not([type=password]), select, textarea");
+      inputs.forEach(input => {
+        if (input.id && input.value) {
+          data[input.id] = input.value;
+        }
+      });
+      sessionStorage.setItem(`medicare_draft_${formId}`, JSON.stringify(data));
+    } catch (e) {
+      console.warn("Could not save form draft:", e);
+    }
+  },
+  restoreDraft(formId) {
+    try {
+      const form = document.getElementById(formId);
+      if (!form) return false;
+      const raw = sessionStorage.getItem(`medicare_draft_${formId}`);
+      if (!raw) return false;
+      const data = JSON.parse(raw);
+      let count = 0;
+      Object.keys(data).forEach(id => {
+        const el = document.getElementById(id);
+        if (el && data[id]) {
+          el.value = data[id];
+          count++;
+        }
+      });
+      return count > 0;
+    } catch (e) {
+      console.warn("Could not restore form draft:", e);
+      return false;
+    }
+  },
+  clearDraft(formId) {
+    try {
+      sessionStorage.removeItem(`medicare_draft_${formId}`);
+    } catch (e) {
+      // ignore
+    }
+  },
+  initAutoSave(formId) {
+    const form = document.getElementById(formId);
+    if (!form) return;
+    form.addEventListener("input", () => this.saveDraft(formId));
+    form.addEventListener("change", () => this.saveDraft(formId));
+  }
+};
+
 // Initialize DB immediately
 DB.init();
 
@@ -429,12 +489,15 @@ function switchMainView(targetView) {
   const adminView = document.getElementById("admin-view");
   const publicNavbar = document.querySelector(".public-navbar");
 
+  DB.set("active_view", targetView);
+
   if (targetView === "admin") {
     publicView.classList.add("d-none");
     if (publicNavbar) publicNavbar.classList.add("d-none");
     adminView.classList.remove("d-none");
     window.scrollTo({ top: 0, behavior: "smooth" });
-    switchAdminTab("dashboard");
+    const savedTab = DB.get("active_tab", "dashboard");
+    switchAdminTab(savedTab || "dashboard");
     renderDashboardCharts();
   } else {
     adminView.classList.add("d-none");
@@ -446,6 +509,7 @@ function switchMainView(targetView) {
 
 function switchAdminTab(tabName) {
   currentPortalTab = tabName;
+  DB.set("active_tab", tabName);
 
   // Update sidebar active state
   document.querySelectorAll(".sidebar-nav-link").forEach(link => {
@@ -1106,6 +1170,9 @@ function openPatientModal(patientId = null) {
   } else {
     if (titleEl) titleEl.textContent = "Add New Patient Record";
     idInput.value = "";
+    if (FormDraftManager.restoreDraft("patientForm")) {
+      showToast("Restored your unsaved patient form draft.", "info");
+    }
   }
 
   const modalEl = document.getElementById("patientModal");
@@ -1212,6 +1279,7 @@ function savePatientForm(e) {
     }
 
     DB.set("patients", patients);
+    FormDraftManager.clearDraft("patientForm");
 
     const modalEl = document.getElementById("patientModal");
     const modal = bootstrap.Modal.getInstance(modalEl);
@@ -1418,6 +1486,9 @@ function openDoctorModal(doctorId = null) {
     if (titleEl) titleEl.textContent = "Add New Specialist";
     idInput.value = "";
     document.getElementById("docImageInput").value = "https://images.unsplash.com/photo-1622253692010-333f2da6031d?auto=format&fit=crop&w=600&q=80";
+    if (FormDraftManager.restoreDraft("doctorForm")) {
+      showToast("Restored your unsaved specialist form draft.", "info");
+    }
   }
 
   const modalEl = document.getElementById("doctorModal");
@@ -1525,6 +1596,7 @@ function saveDoctorForm(e) {
     }
 
     DB.set("doctors", doctors);
+    FormDraftManager.clearDraft("doctorForm");
 
     const modalEl = document.getElementById("doctorModal");
     const modal = bootstrap.Modal.getInstance(modalEl);
@@ -1690,6 +1762,9 @@ function openAppointmentModal(appointmentId = null) {
     const curDay = String(todayObj.getDate()).padStart(2, "0");
     document.getElementById("aptDateInput").value = `${curYear}-${curMonth}-${curDay}`;
     document.getElementById("aptTimeInput").value = "10:00 AM";
+    if (FormDraftManager.restoreDraft("appointmentForm")) {
+      showToast("Restored your unsaved appointment draft.", "info");
+    }
   }
 
   const modalEl = document.getElementById("appointmentModal");
@@ -1811,6 +1886,7 @@ function saveAppointmentForm(e) {
     }
 
     DB.set("appointments", appointments);
+    FormDraftManager.clearDraft("appointmentForm");
 
     const modalEl = document.getElementById("appointmentModal");
     const modal = bootstrap.Modal.getInstance(modalEl);
@@ -2194,8 +2270,36 @@ function refreshAllViews() {
 // 13. DOM Ready Initialization & Event Wiring
 // ==========================================================================
 document.addEventListener("DOMContentLoaded", () => {
+  // Form draft auto-save initialization
+  FormDraftManager.initAutoSave("patientForm");
+  FormDraftManager.initAutoSave("doctorForm");
+  FormDraftManager.initAutoSave("appointmentForm");
+
+  // Prevent accidental data loss on refresh when modal is dirty
+  window.addEventListener("beforeunload", (e) => {
+    const openModalForm = document.querySelector(".modal.show form");
+    if (openModalForm) {
+      const inputs = openModalForm.querySelectorAll("input:not([type=hidden]), select, textarea");
+      const hasInput = Array.from(inputs).some(inp => inp.value && inp.value.trim().length > 0);
+      if (hasInput) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    }
+  });
+
   // Initial renders
   refreshAllViews();
+
+  // Restore active view and tab across page refresh
+  const savedView = DB.get("active_view", "public");
+  const savedTab = DB.get("active_tab", "dashboard");
+  if (savedView === "admin") {
+    switchMainView("admin");
+    if (savedTab && savedTab !== "dashboard") {
+      switchAdminTab(savedTab);
+    }
+  }
 
   // Resize listener to re-draw canvas charts sharply
   window.addEventListener("resize", () => {
