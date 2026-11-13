@@ -2142,6 +2142,60 @@
     </div>
   </div>
 
+  <!-- Hospital Staff Authentication Modal -->
+  <div class="modal fade" id="staffAuthModal" tabindex="-1" aria-labelledby="staffAuthModalTitle" aria-hidden="true" role="dialog" aria-modal="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content border-0 shadow-lg rounded-4">
+        <div class="modal-header border-bottom px-4 pt-4 pb-3">
+          <div class="d-flex align-items-center gap-2">
+            <div class="brand-icon-box" style="width: 36px; height: 36px; font-size: 1.1rem;">
+              <i class="bi bi-shield-lock-fill"></i>
+            </div>
+            <h5 class="modal-title fw-bold" id="staffAuthModalTitle">Hospital Staff Portal Access</h5>
+          </div>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <form id="staffAuthForm" onsubmit="handleStaffAuthSubmit(event)" novalidate>
+          <div class="modal-body p-4">
+            <!-- Alert notice if non-staff attempts access -->
+            <div id="staffAuthAlert" class="alert alert-danger d-none mb-3" role="alert">
+              <div class="d-flex align-items-start gap-2">
+                <i class="bi bi-exclamation-triangle-fill fs-5 flex-shrink-0"></i>
+                <div class="small fw-semibold" id="staffAuthAlertMsg">
+                  Access Restricted: This portal is strictly for authorized Hospital Staff only, not for patients and visitors.
+                </div>
+              </div>
+            </div>
+
+            <p class="small text-secondary mb-3">
+              This area contains protected clinical charts, physician schedules, and hospital management tools. Please verify your role.
+            </p>
+
+            <div class="mb-3">
+              <label for="staffRoleSelect" class="form-label small fw-semibold">Your Role *</label>
+              <select id="staffRoleSelect" class="form-select form-select-custom" required onchange="onStaffRoleChange(this.value)">
+                <option value="staff" selected>Hospital Staff (Doctor / Nurse / Admin)</option>
+                <option value="visitor">Patient / Visitor / General Public</option>
+              </select>
+            </div>
+
+            <div class="mb-3" id="staffPasscodeGroup">
+              <label for="staffPasscodeInput" class="form-label small fw-semibold">Staff Security Passcode *</label>
+              <input type="password" id="staffPasscodeInput" class="form-control form-control-custom" placeholder="Enter Staff PIN (Default: 1234)" value="1234">
+              <div class="form-text small text-muted">Authorized staff passcode is required to access medical records.</div>
+            </div>
+          </div>
+          <div class="modal-footer border-top px-4 py-3">
+            <button type="button" class="btn btn-medicare-outline" data-bs-dismiss="modal">Cancel</button>
+            <button type="submit" class="btn btn-medicare-primary" id="btnStaffAuthSubmit">
+              <i class="bi bi-box-arrow-in-right me-1"></i> Verify & Enter Portal
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <!-- Floating Back-to-Top Button -->
   <button id="btnBackToTop" class="btn-back-to-top" onclick="window.scrollTo({top:0, behavior:'smooth'})" title="Back to top" aria-label="Back to top">
     <i class="bi bi-arrow-up-short"></i>

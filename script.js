@@ -479,32 +479,162 @@ const FormDraftManager = {
 // Initialize DB immediately
 DB.init();
 
+// Submission Lock & Debounce to prevent duplicate form submissions
+const SubmissionLock = {
+  _active: new Set(),
+  acquire(key, buttonEl = null, loadingText = "Processing...") {
+    if (this._active.has(key)) return false;
+    this._active.add(key);
+    if (buttonEl) {
+      buttonEl.disabled = true;
+      buttonEl.dataset.origHtml = buttonEl.innerHTML;
+      buttonEl.innerHTML = `<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> ${loadingText}`;
+    }
+    return true;
+  },
+  release(key, buttonEl = null) {
+    this._active.delete(key);
+    if (buttonEl && buttonEl.dataset.origHtml) {
+      buttonEl.innerHTML = buttonEl.dataset.origHtml;
+      buttonEl.disabled = false;
+    }
+  }
+};
+
+// Staff Portal Authentication & Access Gatekeeper
+function isStaffAuthenticated() {
+  return sessionStorage.getItem("medicare_staff_session") === "true";
+}
+
+function openStaffAuthModal(targetTab = "dashboard") {
+  window._pendingAdminTab = targetTab;
+  const alertEl = document.getElementById("staffAuthAlert");
+  if (alertEl) alertEl.classList.add("d-none");
+  const form = document.getElementById("staffAuthForm");
+  if (form) form.reset();
+  const roleSelect = document.getElementById("staffRoleSelect");
+  if (roleSelect) roleSelect.value = "staff";
+  const passGroup = document.getElementById("staffPasscodeGroup");
+  if (passGroup) passGroup.classList.remove("d-none");
+  const passInput = document.getElementById("staffPasscodeInput");
+  if (passInput) passInput.value = "1234";
+
+  const modalEl = document.getElementById("staffAuthModal");
+  if (modalEl) {
+    const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    modal.show();
+  }
+}
+
+function onStaffRoleChange(selectedRole) {
+  const alertEl = document.getElementById("staffAuthAlert");
+  const alertMsg = document.getElementById("staffAuthAlertMsg");
+  const passGroup = document.getElementById("staffPasscodeGroup");
+
+  if (selectedRole === "visitor") {
+    if (passGroup) passGroup.classList.add("d-none");
+    if (alertEl) alertEl.classList.remove("d-none");
+    if (alertMsg) {
+      alertMsg.textContent = "Notice: The Admin Portal is restricted to authorized Hospital Staff only, not for patients and visitors. Please use the public site for appointment booking and clinical inquiries.";
+    }
+  } else {
+    if (passGroup) passGroup.classList.remove("d-none");
+    if (alertEl) alertEl.classList.add("d-none");
+  }
+}
+
+function handleStaffAuthSubmit(e) {
+  e.preventDefault();
+  const role = document.getElementById("staffRoleSelect")?.value;
+  const passcode = (document.getElementById("staffPasscodeInput")?.value || "").trim();
+  const alertEl = document.getElementById("staffAuthAlert");
+  const alertMsg = document.getElementById("staffAuthAlertMsg");
+
+  // If patient/visitor tries to log in
+  if (role === "visitor") {
+    const message = "Access Restricted: This portal is strictly for authorized Hospital Staff only, not for patients and visitors! Please use the 'Book Appointment' or 'Contact' sections for clinical care.";
+    if (alertEl) {
+      alertEl.classList.remove("d-none");
+      if (alertMsg) alertMsg.textContent = message;
+    }
+    showToast(message, "danger");
+    return;
+  }
+
+  // Validate staff passcode
+  const validCodes = ["1234", "admin", "staff", "medicare", "doctor"];
+  if (!validCodes.includes(passcode.toLowerCase())) {
+    const message = "Invalid staff passcode. Access denied. Hospital Staff portal is restricted to authorized personnel only.";
+    if (alertEl) {
+      alertEl.classList.remove("d-none");
+      if (alertMsg) alertMsg.textContent = message;
+    }
+    showToast(message, "danger");
+    return;
+  }
+
+  // Authorized staff
+  sessionStorage.setItem("medicare_staff_session", "true");
+  const modalEl = document.getElementById("staffAuthModal");
+  if (modalEl) {
+    const modal = bootstrap.Modal.getInstance(modalEl);
+    if (modal) modal.hide();
+  }
+
+  showToast("Staff access verified. Welcome to MediCare Clinical Portal.", "success");
+  proceedToAdmin(window._pendingAdminTab || "dashboard");
+}
+
+function logoutStaff() {
+  sessionStorage.removeItem("medicare_staff_session");
+  DB.set("active_view", "public");
+  switchMainView("public");
+  showToast("You have been signed out from the Hospital Staff Portal.", "info");
+}
+
 // ==========================================================================
 // 3. Navigation & View Controller
 // ==========================================================================
 let currentPortalTab = "dashboard";
 
 function switchMainView(targetView) {
+  if (targetView === "admin") {
+    if (!isStaffAuthenticated()) {
+      openStaffAuthModal("dashboard");
+      return;
+    }
+    proceedToAdmin();
+  } else {
+    proceedToPublic();
+  }
+}
+
+function proceedToAdmin(targetTab = null) {
   const publicView = document.getElementById("public-view");
   const adminView = document.getElementById("admin-view");
   const publicNavbar = document.querySelector(".public-navbar");
 
-  DB.set("active_view", targetView);
+  DB.set("active_view", "admin");
+  publicView.classList.add("d-none");
+  if (publicNavbar) publicNavbar.classList.add("d-none");
+  adminView.classList.remove("d-none");
+  window.scrollTo({ top: 0, behavior: "smooth" });
 
-  if (targetView === "admin") {
-    publicView.classList.add("d-none");
-    if (publicNavbar) publicNavbar.classList.add("d-none");
-    adminView.classList.remove("d-none");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-    const savedTab = DB.get("active_tab", "dashboard");
-    switchAdminTab(savedTab || "dashboard");
-    renderDashboardCharts();
-  } else {
-    adminView.classList.add("d-none");
-    publicView.classList.remove("d-none");
-    if (publicNavbar) publicNavbar.classList.remove("d-none");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
+  const tab = targetTab || DB.get("active_tab", "dashboard") || "dashboard";
+  switchAdminTab(tab);
+  renderDashboardCharts();
+}
+
+function proceedToPublic() {
+  const publicView = document.getElementById("public-view");
+  const adminView = document.getElementById("admin-view");
+  const publicNavbar = document.querySelector(".public-navbar");
+
+  DB.set("active_view", "public");
+  adminView.classList.add("d-none");
+  publicView.classList.remove("d-none");
+  if (publicNavbar) publicNavbar.classList.remove("d-none");
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function switchAdminTab(tabName) {
@@ -1240,11 +1370,31 @@ function savePatientForm(e) {
       return;
     }
 
-    let patients = DB.get("patients", []);
+    // Duplicate validation: check if another patient has identical phone or email
+    const patients = DB.get("patients", []);
+    const dupPhone = patients.find(p => p.id !== id && phone && p.phone === phone);
+    if (dupPhone) {
+      showToast(`A patient record with phone "${phone}" already exists (${dupPhone.name}, ID: ${dupPhone.id}).`, "warning");
+      form.classList.add("was-validated");
+      document.getElementById("patPhoneInput")?.focus();
+      return;
+    }
+    const dupEmail = patients.find(p => p.id !== id && email && p.email && p.email.toLowerCase() === email.toLowerCase());
+    if (dupEmail) {
+      showToast(`A patient record with email "${email}" already exists (${dupEmail.name}, ID: ${dupEmail.id}).`, "warning");
+      form.classList.add("was-validated");
+      document.getElementById("patEmailInput")?.focus();
+      return;
+    }
+
+    const submitBtn = form.querySelector("button[type=submit]");
+    if (!SubmissionLock.acquire("patientForm", submitBtn, "Saving...")) return;
+
+    let updatedPatients = [...patients];
 
     if (id) {
       // Update existing
-      patients = patients.map(p => {
+      updatedPatients = updatedPatients.map(p => {
         if (p.id === id) {
           return { ...p, name, age, gender, bloodGroup, phone, email, condition, doctor, status, address };
         }
@@ -1254,7 +1404,7 @@ function savePatientForm(e) {
       logActivity("bi-pencil-square", "badge-blue", "Patient Updated", `${name}'s medical chart was updated.`);
     } else {
       // Create new
-      const newId = `PAT-${String(patients.length + 1).padStart(3, "0")}`;
+      const newId = `PAT-${String(updatedPatients.length + 1).padStart(3, "0")}`;
       const now = new Date();
       const curYear = now.getFullYear();
       const curMonth = String(now.getMonth() + 1).padStart(2, "0");
@@ -1273,12 +1423,12 @@ function savePatientForm(e) {
         address,
         admissionDate: `${curYear}-${curMonth}-${curDay}`
       };
-      patients.unshift(newPatient);
+      updatedPatients.unshift(newPatient);
       showToast(`New patient ${name} registered with ID ${newId}.`);
       logActivity("bi-person-plus", "badge-mint", "New Patient Registered", `${name} was admitted to records.`);
     }
 
-    DB.set("patients", patients);
+    DB.set("patients", updatedPatients);
     FormDraftManager.clearDraft("patientForm");
 
     const modalEl = document.getElementById("patientModal");
@@ -1287,6 +1437,7 @@ function savePatientForm(e) {
 
     renderPatientsTable();
     updateDashboardStats();
+    setTimeout(() => SubmissionLock.release("patientForm", submitBtn), 500);
   } catch (err) {
     console.error("Error saving patient:", err);
     showToast("An unexpected error occurred while saving the patient record.", "error");
@@ -1564,10 +1715,31 @@ function saveDoctorForm(e) {
       return;
     }
 
-    let doctors = DB.get("doctors", []);
+    const doctors = DB.get("doctors", []);
+
+    // Duplicate validation: check if another specialist has identical phone or email
+    const dupPhone = doctors.find(d => d.id !== id && phone && d.phone === phone);
+    if (dupPhone) {
+      showToast(`A specialist with phone "${phone}" is already registered (${dupPhone.name}).`, "warning");
+      form.classList.add("was-validated");
+      document.getElementById("docPhoneInput")?.focus();
+      return;
+    }
+    const dupEmail = doctors.find(d => d.id !== id && email && d.email && d.email.toLowerCase() === email.toLowerCase());
+    if (dupEmail) {
+      showToast(`A specialist with email "${email}" is already registered (${dupEmail.name}).`, "warning");
+      form.classList.add("was-validated");
+      document.getElementById("docEmailInput")?.focus();
+      return;
+    }
+
+    const submitBtn = form.querySelector("button[type=submit]");
+    if (!SubmissionLock.acquire("doctorForm", submitBtn, "Saving...")) return;
+
+    let updatedDoctors = [...doctors];
 
     if (id) {
-      doctors = doctors.map(d => {
+      updatedDoctors = updatedDoctors.map(d => {
         if (d.id === id) {
           return { ...d, name, department, degree, experience, fee, phone, email, status, image, about };
         }
@@ -1575,8 +1747,8 @@ function saveDoctorForm(e) {
       });
       showToast(`Doctor profile for ${name} updated.`);
     } else {
-      const newId = `DOC-${100 + doctors.length + 1}`;
-      doctors.unshift({
+      const newId = `DOC-${100 + updatedDoctors.length + 1}`;
+      updatedDoctors.unshift({
         id: newId,
         name,
         department,
@@ -1595,7 +1767,7 @@ function saveDoctorForm(e) {
       logActivity("bi-person-badge", "badge-lavender", "Doctor Onboarded", `${name} joined ${department}.`);
     }
 
-    DB.set("doctors", doctors);
+    DB.set("doctors", updatedDoctors);
     FormDraftManager.clearDraft("doctorForm");
 
     const modalEl = document.getElementById("doctorModal");
@@ -1605,6 +1777,7 @@ function saveDoctorForm(e) {
     renderDoctorsGrid();
     renderPublicFeaturedDoctors();
     updateDashboardStats();
+    setTimeout(() => SubmissionLock.release("doctorForm", submitBtn), 500);
   } catch (err) {
     console.error("Error saving doctor:", err);
     showToast("An unexpected error occurred while saving the doctor profile.", "error");
@@ -1857,10 +2030,46 @@ function saveAppointmentForm(e) {
       return;
     }
 
-    let appointments = DB.get("appointments", []);
+    const appointments = DB.get("appointments", []);
+
+    // Prevent duplicate appointment bookings:
+    // 1. Same doctor at the same date and time (ignoring Cancelled appointments and current appointment)
+    const doctorConflict = appointments.find(a =>
+      a.id !== id &&
+      a.doctorName === doctorName &&
+      a.date === date &&
+      a.time === time &&
+      a.status !== "Cancelled"
+    );
+    if (doctorConflict) {
+      showToast(`Doctor ${doctorName} is already booked on ${date} at ${time}. Please select an alternate time slot or specialist.`, "warning");
+      form.classList.add("was-validated");
+      document.getElementById("aptTimeInput")?.focus();
+      return;
+    }
+
+    // 2. Same patient at the same date and time
+    const patientConflict = appointments.find(a =>
+      a.id !== id &&
+      a.patientName.toLowerCase() === patientName.toLowerCase() &&
+      a.date === date &&
+      a.time === time &&
+      a.status !== "Cancelled"
+    );
+    if (patientConflict) {
+      showToast(`Patient ${patientName} already has an active appointment scheduled on ${date} at ${time}.`, "warning");
+      form.classList.add("was-validated");
+      document.getElementById("aptDateInput")?.focus();
+      return;
+    }
+
+    const submitBtn = form.querySelector("button[type=submit]");
+    if (!SubmissionLock.acquire("appointmentForm", submitBtn, "Booking...")) return;
+
+    let updatedAppointments = [...appointments];
 
     if (id) {
-      appointments = appointments.map(a => {
+      updatedAppointments = updatedAppointments.map(a => {
         if (a.id === id) {
           return { ...a, patientName, patientPhone, doctorName, department, date, time, type, status, reason };
         }
@@ -1868,8 +2077,8 @@ function saveAppointmentForm(e) {
       });
       showToast(`Appointment ${id} details updated.`);
     } else {
-      const newId = `APT-2026-${String(appointments.length + 1).padStart(2, "0")}`;
-      appointments.unshift({
+      const newId = `APT-2026-${String(updatedAppointments.length + 1).padStart(2, "0")}`;
+      updatedAppointments.unshift({
         id: newId,
         patientName,
         patientPhone,
@@ -1885,7 +2094,7 @@ function saveAppointmentForm(e) {
       logActivity("bi-calendar2-plus", "badge-blue", "Appointment Booked", `${patientName} with ${doctorName}.`);
     }
 
-    DB.set("appointments", appointments);
+    DB.set("appointments", updatedAppointments);
     FormDraftManager.clearDraft("appointmentForm");
 
     const modalEl = document.getElementById("appointmentModal");
@@ -1895,6 +2104,7 @@ function saveAppointmentForm(e) {
     renderAppointmentsTable();
     renderRecentAppointmentsTable();
     updateDashboardStats();
+    setTimeout(() => SubmissionLock.release("appointmentForm", submitBtn), 500);
   } catch (err) {
     console.error("Error saving appointment:", err);
     showToast("An unexpected error occurred while saving the appointment.", "error");
@@ -2155,6 +2365,9 @@ function handlePublicContactSubmit(e) {
     const form = e.target;
     if (!form) return;
 
+    const submitBtn = form.querySelector('button[type="submit"]');
+    if (!SubmissionLock.acquire("publicContactForm", submitBtn, "Sending...")) return;
+
     const name = (form.querySelector('input[type="text"]')?.value || "").trim();
     const phone = (form.querySelector('input[type="tel"]')?.value || "").trim();
     const email = (form.querySelector('input[type="email"]')?.value || "").trim();
@@ -2165,6 +2378,7 @@ function handlePublicContactSubmit(e) {
       showToast("Please enter your full name.", "warning");
       form.classList.add("was-validated");
       form.querySelector('input[type="text"]')?.focus();
+      SubmissionLock.release("publicContactForm", submitBtn);
       return;
     }
 
@@ -2172,6 +2386,7 @@ function handlePublicContactSubmit(e) {
       showToast("Please provide a valid contact phone number (at least 7 digits).", "warning");
       form.classList.add("was-validated");
       form.querySelector('input[type="tel"]')?.focus();
+      SubmissionLock.release("publicContactForm", submitBtn);
       return;
     }
 
@@ -2179,6 +2394,7 @@ function handlePublicContactSubmit(e) {
       showToast("Please enter a valid email address.", "warning");
       form.classList.add("was-validated");
       form.querySelector('input[type="email"]')?.focus();
+      SubmissionLock.release("publicContactForm", submitBtn);
       return;
     }
 
@@ -2186,6 +2402,7 @@ function handlePublicContactSubmit(e) {
       showToast("Please select a medical department of interest.", "warning");
       form.classList.add("was-validated");
       form.querySelector("select")?.focus();
+      SubmissionLock.release("publicContactForm", submitBtn);
       return;
     }
 
@@ -2193,12 +2410,14 @@ function handlePublicContactSubmit(e) {
       showToast("Please write a brief description of your inquiry.", "warning");
       form.classList.add("was-validated");
       form.querySelector("textarea")?.focus();
+      SubmissionLock.release("publicContactForm", submitBtn);
       return;
     }
 
     showToast("Thank you! Your inquiry has been sent to our patient support team.");
     form.reset();
     form.classList.remove("was-validated");
+    setTimeout(() => SubmissionLock.release("publicContactForm", submitBtn), 1000);
   } catch (err) {
     console.error("Error handling contact submission:", err);
     showToast("An unexpected error occurred while sending your inquiry. Please try again.", "error");
