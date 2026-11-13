@@ -740,8 +740,28 @@ function showToast(message, type = "success") {
 }
 
 // --------------------------------------------------------------------------
-// Form Validation Helpers
+// Form Validation & Secure Input Helpers (XSS Prevention)
 // --------------------------------------------------------------------------
+function escapeHtml(str) {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function sanitizeInput(str) {
+  if (typeof str !== "string") return str;
+  return str
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "")
+    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, "")
+    .replace(/javascript:/gi, "")
+    .replace(/on\w+\s*=/gi, "")
+    .trim();
+}
+
 function isValidEmail(email) {
   if (!email || typeof email !== "string") return false;
   const re = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -834,31 +854,39 @@ function renderRecentAppointmentsTable() {
   }
 
   recent.forEach(apt => {
+    const safePatient = escapeHtml(apt.patientName);
+    const safePhone = escapeHtml(apt.patientPhone || 'N/A');
+    const safeDoctor = escapeHtml(apt.doctorName);
+    const safeDept = escapeHtml(apt.department);
+    const safeDate = escapeHtml(apt.date);
+    const safeTime = escapeHtml(apt.time);
+    const safeId = escapeHtml(apt.id);
     const statusClass = getStatusClass(apt.status);
+
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td><span class="fw-bold">${apt.id}</span></td>
+      <td><span class="fw-bold">${safeId}</span></td>
       <td>
-        <div class="fw-semibold">${apt.patientName}</div>
-        <div class="small text-muted">${apt.patientPhone || 'N/A'}</div>
+        <div class="fw-semibold">${safePatient}</div>
+        <div class="small text-muted">${safePhone}</div>
       </td>
       <td>
-        <div>${apt.doctorName}</div>
-        <span class="badge-pill-pastel badge-blue" style="font-size: 0.72rem; padding: 2px 8px;">${apt.department}</span>
+        <div>${safeDoctor}</div>
+        <span class="badge-pill-pastel badge-blue" style="font-size: 0.72rem; padding: 2px 8px;">${safeDept}</span>
       </td>
       <td>
-        <div>${apt.date}</div>
-        <div class="small text-muted">${apt.time}</div>
+        <div>${safeDate}</div>
+        <div class="small text-muted">${safeTime}</div>
       </td>
       <td>
-        <span class="status-badge ${statusClass}">${apt.status}</span>
+        <span class="status-badge ${statusClass}">${escapeHtml(apt.status)}</span>
       </td>
       <td>
         <div class="d-flex gap-1">
-          <button class="btn-table-action" title="Mark Completed" onclick="quickUpdateAppointmentStatus('${apt.id}', 'Completed')">
+          <button class="btn-table-action" title="Mark Completed" onclick="quickUpdateAppointmentStatus('${safeId}', 'Completed')">
             <i class="bi bi-check2"></i>
           </button>
-          <button class="btn-table-action btn-delete" title="Cancel Appointment" onclick="quickUpdateAppointmentStatus('${apt.id}', 'Cancelled')">
+          <button class="btn-table-action btn-delete" title="Cancel Appointment" onclick="quickUpdateAppointmentStatus('${safeId}', 'Cancelled')">
             <i class="bi bi-x"></i>
           </button>
         </div>
@@ -878,13 +906,13 @@ function renderActivityFeed() {
     const div = document.createElement("div");
     div.className = "activity-item";
     div.innerHTML = `
-      <div class="activity-dot-circle ${act.color}">
-        <i class="bi ${act.icon}"></i>
+      <div class="activity-dot-circle ${escapeHtml(act.color)}">
+        <i class="bi ${escapeHtml(act.icon)}"></i>
       </div>
       <div>
-        <div class="fw-semibold" style="font-size: 0.92rem;">${act.title}</div>
-        <div class="text-secondary" style="font-size: 0.85rem;">${act.detail}</div>
-        <div class="text-muted" style="font-size: 0.75rem; margin-top: 2px;">${act.time}</div>
+        <div class="fw-semibold" style="font-size: 0.92rem;">${escapeHtml(act.title)}</div>
+        <div class="text-secondary" style="font-size: 0.85rem;">${escapeHtml(act.detail)}</div>
+        <div class="text-muted" style="font-size: 0.75rem; margin-top: 2px;">${escapeHtml(act.time)}</div>
       </div>
     `;
     container.appendChild(div);
@@ -1218,43 +1246,51 @@ function renderPatientsTable() {
   }
 
   filtered.forEach(pat => {
+    const safeName = escapeHtml(pat.name);
+    const safeEmail = escapeHtml(pat.email || 'No email registered');
+    const safePhone = escapeHtml(pat.phone);
+    const safeCondition = escapeHtml(pat.condition || 'General Routine');
+    const safeDoctor = escapeHtml(pat.doctor || 'Unassigned');
+    const safeBlood = escapeHtml(pat.bloodGroup || 'N/A');
+    const safeId = escapeHtml(pat.id);
+
     const initials = pat.name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase();
     const avatarColor = pat.gender === "Female" ? "background-color: var(--pastel-pink); color: var(--pastel-pink-dark);" : "background-color: var(--pastel-blue); color: var(--pastel-blue-dark);";
     const statusClass = getStatusClass(pat.status);
 
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td><span class="fw-bold">${pat.id}</span></td>
+      <td><span class="fw-bold">${safeId}</span></td>
       <td>
         <div class="d-flex align-items-center gap-3">
           <div class="patient-avatar-box" style="${avatarColor}">${initials}</div>
           <div>
-            <div class="fw-bold text-dark">${pat.name}</div>
-            <div class="small text-muted">${pat.email || 'No email registered'}</div>
+            <div class="fw-bold text-dark">${safeName}</div>
+            <div class="small text-muted">${safeEmail}</div>
           </div>
         </div>
       </td>
-      <td>${pat.age} yrs / ${pat.gender}</td>
+      <td>${Number(pat.age)} yrs / ${escapeHtml(pat.gender)}</td>
       <td>
-        <div>${pat.phone}</div>
-        <span class="badge-pill-pastel badge-cream py-0 px-2" style="font-size: 0.7rem;">Blood: ${pat.bloodGroup || 'N/A'}</span>
+        <div>${safePhone}</div>
+        <span class="badge-pill-pastel badge-cream py-0 px-2" style="font-size: 0.7rem;">Blood: ${safeBlood}</span>
       </td>
       <td>
-        <div class="fw-semibold text-truncate" style="max-width: 180px;">${pat.condition || 'General Routine'}</div>
-        <div class="small text-muted">${pat.doctor || 'Unassigned'}</div>
+        <div class="fw-semibold text-truncate" style="max-width: 180px;">${safeCondition}</div>
+        <div class="small text-muted">${safeDoctor}</div>
       </td>
       <td>
-        <span class="status-badge ${statusClass}">${pat.status}</span>
+        <span class="status-badge ${statusClass}">${escapeHtml(pat.status)}</span>
       </td>
       <td>
         <div class="d-flex gap-1">
-          <button class="btn-table-action" title="View Patient Profile" onclick="viewPatientDetails('${pat.id}')">
+          <button class="btn-table-action" title="View Patient Profile" onclick="viewPatientDetails('${safeId}')">
             <i class="bi bi-eye"></i>
           </button>
-          <button class="btn-table-action" title="Edit Patient" onclick="openPatientModal('${pat.id}')">
+          <button class="btn-table-action" title="Edit Patient" onclick="openPatientModal('${safeId}')">
             <i class="bi bi-pencil"></i>
           </button>
-          <button class="btn-table-action btn-delete" title="Delete Patient" onclick="deletePatientRecord('${pat.id}')">
+          <button class="btn-table-action btn-delete" title="Delete Patient" onclick="deletePatientRecord('${safeId}')">
             <i class="bi bi-trash3"></i>
           </button>
         </div>
@@ -1317,17 +1353,17 @@ function savePatientForm(e) {
     if (!form) return;
 
     const id = (document.getElementById("patientIdHidden")?.value || "").trim();
-    const name = (document.getElementById("patNameInput")?.value || "").trim();
+    const name = sanitizeInput((document.getElementById("patNameInput")?.value || "").trim());
     const ageRaw = document.getElementById("patAgeInput")?.value;
     const age = Number(ageRaw);
-    const gender = document.getElementById("patGenderInput")?.value;
-    const bloodGroup = document.getElementById("patBloodInput")?.value;
-    const phone = (document.getElementById("patPhoneInput")?.value || "").trim();
-    const email = (document.getElementById("patEmailInput")?.value || "").trim();
-    const condition = (document.getElementById("patConditionInput")?.value || "").trim();
-    const doctor = document.getElementById("patDoctorInput")?.value;
-    const status = document.getElementById("patStatusInput")?.value;
-    const address = (document.getElementById("patAddressInput")?.value || "").trim();
+    const gender = sanitizeInput(document.getElementById("patGenderInput")?.value);
+    const bloodGroup = sanitizeInput(document.getElementById("patBloodInput")?.value);
+    const phone = sanitizeInput((document.getElementById("patPhoneInput")?.value || "").trim());
+    const email = sanitizeInput((document.getElementById("patEmailInput")?.value || "").trim());
+    const condition = sanitizeInput((document.getElementById("patConditionInput")?.value || "").trim());
+    const doctor = sanitizeInput(document.getElementById("patDoctorInput")?.value);
+    const status = sanitizeInput(document.getElementById("patStatusInput")?.value);
+    const address = sanitizeInput((document.getElementById("patAddressInput")?.value || "").trim());
 
     if (!name) {
       showToast("Please enter the patient's full name.", "warning");
@@ -1453,47 +1489,49 @@ function viewPatientDetails(patientId) {
   if (!content) return;
 
   const statusClass = getStatusClass(pat.status);
+  const initials = pat.name.split(" ").map(n => n[0]).join("").substring(0, 2).toUpperCase();
+
   content.innerHTML = `
     <div class="text-center pb-3 border-bottom">
       <div class="patient-avatar-box mx-auto mb-2" style="width: 64px; height: 64px; font-size: 1.5rem; background: var(--pastel-blue); color: var(--brand-primary);">
-        ${pat.name.split(" ").map(n => n[0]).join("")}
+        ${initials}
       </div>
-      <h4 class="fw-bold mb-1">${pat.name}</h4>
-      <div class="text-muted small">Record ID: ${pat.id}</div>
-      <span class="status-badge ${statusClass} mt-2">${pat.status}</span>
+      <h4 class="fw-bold mb-1">${escapeHtml(pat.name)}</h4>
+      <div class="text-muted small">Record ID: ${escapeHtml(pat.id)}</div>
+      <span class="status-badge ${statusClass} mt-2">${escapeHtml(pat.status)}</span>
     </div>
     <div class="row g-3 mt-2">
       <div class="col-6">
         <label class="small text-muted">Age / Gender</label>
-        <div class="fw-semibold">${pat.age} Years (${pat.gender})</div>
+        <div class="fw-semibold">${Number(pat.age)} Years (${escapeHtml(pat.gender)})</div>
       </div>
       <div class="col-6">
         <label class="small text-muted">Blood Group</label>
-        <div class="fw-semibold text-danger">${pat.bloodGroup || 'Not Recorded'}</div>
+        <div class="fw-semibold text-danger">${escapeHtml(pat.bloodGroup || 'Not Recorded')}</div>
       </div>
       <div class="col-6">
         <label class="small text-muted">Contact Phone</label>
-        <div class="fw-semibold">${pat.phone}</div>
+        <div class="fw-semibold">${escapeHtml(pat.phone)}</div>
       </div>
       <div class="col-6">
         <label class="small text-muted">Email Address</label>
-        <div class="fw-semibold text-truncate">${pat.email || 'N/A'}</div>
+        <div class="fw-semibold text-truncate">${escapeHtml(pat.email || 'N/A')}</div>
       </div>
       <div class="col-12">
         <label class="small text-muted">Primary Diagnosed Condition</label>
-        <div class="p-2 rounded bg-light border fw-semibold text-primary">${pat.condition || 'General Checkup'}</div>
+        <div class="p-2 rounded bg-light border fw-semibold text-primary">${escapeHtml(pat.condition || 'General Checkup')}</div>
       </div>
       <div class="col-6">
         <label class="small text-muted">Assigned Physician</label>
-        <div class="fw-semibold">${pat.doctor || 'Unassigned'}</div>
+        <div class="fw-semibold">${escapeHtml(pat.doctor || 'Unassigned')}</div>
       </div>
       <div class="col-6">
         <label class="small text-muted">Admission Date</label>
-        <div class="fw-semibold">${pat.admissionDate || '2026-11-12'}</div>
+        <div class="fw-semibold">${escapeHtml(pat.admissionDate || '2026-11-12')}</div>
       </div>
       <div class="col-12">
         <label class="small text-muted">Residential Address</label>
-        <div class="text-secondary small">${pat.address || 'Address on file'}</div>
+        <div class="text-secondary small">${escapeHtml(pat.address || 'Address on file')}</div>
       </div>
     </div>
   `;
@@ -1559,6 +1597,14 @@ function renderDoctorsGrid() {
   }
 
   filtered.forEach(doc => {
+    const safeName = escapeHtml(doc.name);
+    const safeDept = escapeHtml(doc.department);
+    const safeDegree = escapeHtml(doc.degree);
+    const safeExp = escapeHtml(doc.experience);
+    const safeAbout = escapeHtml(doc.about || 'Dedicated clinical practitioner focused on high-standard patient care.');
+    const safeId = escapeHtml(doc.id);
+    const safeStatus = escapeHtml(doc.status);
+
     const isAvail = doc.status === "Available";
     const statusBg = isAvail ? "background: #DFF3EA; color: #0E9F6E;" : "background: #FFF4E5; color: #D97706;";
 
@@ -1567,37 +1613,37 @@ function renderDoctorsGrid() {
     col.innerHTML = `
       <div class="doctor-card">
         <div class="doctor-img-wrap">
-          <img src="${doc.image}" alt="Portrait of ${doc.name}, Specialist in ${doc.department}" loading="lazy">
-          <span class="doctor-dept-pill">${doc.department}</span>
+          <img src="${doc.image}" alt="Portrait of ${safeName}, Specialist in ${safeDept}" loading="lazy">
+          <span class="doctor-dept-pill">${safeDept}</span>
           <span class="doctor-availability-pill" style="${statusBg}">
-            <i class="bi bi-circle-fill me-1" style="font-size: 0.5rem;"></i>${doc.status}
+            <i class="bi bi-circle-fill me-1" style="font-size: 0.5rem;"></i>${safeStatus}
           </span>
         </div>
         <div class="doctor-body">
           <div>
             <div class="d-flex justify-content-between align-items-start mb-1">
-              <h5 class="doctor-name mb-0">${doc.name}</h5>
+              <h5 class="doctor-name mb-0">${safeName}</h5>
               <div class="doctor-rating">
-                <i class="bi bi-star-fill"></i> ${doc.rating}
+                <i class="bi bi-star-fill"></i> ${Number(doc.rating) || 5.0}
               </div>
             </div>
-            <div class="doctor-sub">${doc.degree}</div>
+            <div class="doctor-sub">${safeDegree}</div>
             <p class="small text-secondary mb-3" style="line-height: 1.5; height: 42px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">
-              ${doc.about || 'Dedicated clinical practitioner focused on high-standard patient care.'}
+              ${safeAbout}
             </p>
             <div class="d-flex justify-content-between align-items-center py-2 px-3 rounded bg-light border mb-3 small">
-              <span class="text-muted"><i class="bi bi-briefcase me-1"></i> ${doc.experience}</span>
-              <span class="fw-bold text-primary"><i class="bi bi-cash me-1"></i> $${doc.fee}/Visit</span>
+              <span class="text-muted"><i class="bi bi-briefcase me-1"></i> ${safeExp}</span>
+              <span class="fw-bold text-primary"><i class="bi bi-cash me-1"></i> $${Number(doc.fee)}/Visit</span>
             </div>
           </div>
           <div class="d-flex gap-2">
-            <button class="btn btn-sm btn-outline-secondary flex-grow-1" onclick="openDoctorModal('${doc.id}')">
+            <button class="btn btn-sm btn-outline-secondary flex-grow-1" onclick="openDoctorModal('${safeId}')">
               <i class="bi bi-pencil me-1"></i> Edit
             </button>
-            <button class="btn btn-sm btn-medicare-primary flex-grow-1" onclick="openBookAppointmentForDoctor('${doc.name}', '${doc.department}')">
+            <button class="btn btn-sm btn-medicare-primary flex-grow-1" onclick="openBookAppointmentForDoctor('${safeName.replace(/'/g, "\\'")}', '${safeDept.replace(/'/g, "\\'")}')">
               <i class="bi bi-calendar-plus me-1"></i> Book
             </button>
-            <button class="btn btn-sm btn-outline-danger" title="Remove Doctor" onclick="deleteDoctorRecord('${doc.id}')">
+            <button class="btn btn-sm btn-outline-danger" title="Remove Doctor" onclick="deleteDoctorRecord('${safeId}')">
               <i class="bi bi-trash"></i>
             </button>
           </div>
@@ -1654,17 +1700,17 @@ function saveDoctorForm(e) {
     if (!form) return;
 
     const id = (document.getElementById("doctorIdHidden")?.value || "").trim();
-    const name = (document.getElementById("docNameInput")?.value || "").trim();
-    const department = document.getElementById("docDeptInput")?.value;
-    const degree = (document.getElementById("docDegreeInput")?.value || "").trim();
-    const experience = (document.getElementById("docExpInput")?.value || "").trim();
+    const name = sanitizeInput((document.getElementById("docNameInput")?.value || "").trim());
+    const department = sanitizeInput(document.getElementById("docDeptInput")?.value);
+    const degree = sanitizeInput((document.getElementById("docDegreeInput")?.value || "").trim());
+    const experience = sanitizeInput((document.getElementById("docExpInput")?.value || "").trim());
     const feeRaw = document.getElementById("docFeeInput")?.value;
     const fee = Number(feeRaw);
-    const phone = (document.getElementById("docPhoneInput")?.value || "").trim();
-    const email = (document.getElementById("docEmailInput")?.value || "").trim();
-    const status = document.getElementById("docStatusInput")?.value;
-    const image = (document.getElementById("docImageInput")?.value || "").trim() || "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=600&q=80";
-    const about = (document.getElementById("docAboutInput")?.value || "").trim();
+    const phone = sanitizeInput((document.getElementById("docPhoneInput")?.value || "").trim());
+    const email = sanitizeInput((document.getElementById("docEmailInput")?.value || "").trim());
+    const status = sanitizeInput(document.getElementById("docStatusInput")?.value);
+    const image = sanitizeInput((document.getElementById("docImageInput")?.value || "").trim()) || "https://images.unsplash.com/photo-1559839734-2b71ea197ec2?auto=format&fit=crop&w=600&q=80";
+    const about = sanitizeInput((document.getElementById("docAboutInput")?.value || "").trim());
 
     if (!name) {
       showToast("Doctor full name is required.", "warning");
@@ -1844,28 +1890,39 @@ function renderAppointmentsTable() {
   }
 
   filtered.forEach(apt => {
+    const safePatient = escapeHtml(apt.patientName);
+    const safePhone = escapeHtml(apt.patientPhone || 'No phone');
+    const safeDoctor = escapeHtml(apt.doctorName);
+    const safeDept = escapeHtml(apt.department);
+    const safeDate = escapeHtml(apt.date);
+    const safeTime = escapeHtml(apt.time);
+    const safeReason = escapeHtml(apt.reason || 'General Health Consultation');
+    const safeType = escapeHtml(apt.type || 'In-Person');
+    const safeId = escapeHtml(apt.id);
+    const safeStatus = escapeHtml(apt.status);
     const statusClass = getStatusClass(apt.status);
+
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td><span class="fw-bold">${apt.id}</span></td>
+      <td><span class="fw-bold">${safeId}</span></td>
       <td>
-        <div class="fw-bold">${apt.patientName}</div>
-        <div class="small text-muted">${apt.patientPhone || 'No phone'}</div>
+        <div class="fw-bold">${safePatient}</div>
+        <div class="small text-muted">${safePhone}</div>
       </td>
       <td>
-        <div class="fw-semibold">${apt.doctorName}</div>
-        <span class="badge-pill-pastel badge-blue" style="font-size: 0.72rem; padding: 2px 8px;">${apt.department}</span>
+        <div class="fw-semibold">${safeDoctor}</div>
+        <span class="badge-pill-pastel badge-blue" style="font-size: 0.72rem; padding: 2px 8px;">${safeDept}</span>
       </td>
       <td>
-        <div><i class="bi bi-calendar3 me-1 text-muted"></i> ${apt.date}</div>
-        <div class="small text-muted"><i class="bi bi-clock me-1"></i> ${apt.time}</div>
+        <div><i class="bi bi-calendar3 me-1 text-muted"></i> ${safeDate}</div>
+        <div class="small text-muted"><i class="bi bi-clock me-1"></i> ${safeTime}</div>
       </td>
       <td>
-        <div class="text-truncate" style="max-width: 180px;">${apt.reason || 'General Health Consultation'}</div>
-        <span class="badge bg-light text-secondary border" style="font-size: 0.7rem;">${apt.type || 'In-Person'}</span>
+        <div class="text-truncate" style="max-width: 180px;">${safeReason}</div>
+        <span class="badge bg-light text-secondary border" style="font-size: 0.7rem;">${safeType}</span>
       </td>
       <td>
-        <span class="status-badge ${statusClass}">${apt.status}</span>
+        <span class="status-badge ${statusClass}">${safeStatus}</span>
       </td>
       <td>
         <div class="dropdown">
@@ -1873,11 +1930,11 @@ function renderAppointmentsTable() {
             Action
           </button>
           <ul class="dropdown-menu dropdown-menu-end shadow-sm">
-            <li><a class="dropdown-item" href="javascript:void(0)" onclick="quickUpdateAppointmentStatus('${apt.id}', 'Confirmed')"><i class="bi bi-check2-circle text-success me-2"></i> Confirm</a></li>
-            <li><a class="dropdown-item" href="javascript:void(0)" onclick="quickUpdateAppointmentStatus('${apt.id}', 'Completed')"><i class="bi bi-clipboard2-check text-primary me-2"></i> Mark Completed</a></li>
-            <li><a class="dropdown-item" href="javascript:void(0)" onclick="quickUpdateAppointmentStatus('${apt.id}', 'Cancelled')"><i class="bi bi-x-circle text-danger me-2"></i> Cancel</a></li>
+            <li><a class="dropdown-item" href="javascript:void(0)" onclick="quickUpdateAppointmentStatus('${safeId}', 'Confirmed')"><i class="bi bi-check2-circle text-success me-2"></i> Confirm</a></li>
+            <li><a class="dropdown-item" href="javascript:void(0)" onclick="quickUpdateAppointmentStatus('${safeId}', 'Completed')"><i class="bi bi-clipboard2-check text-primary me-2"></i> Mark Completed</a></li>
+            <li><a class="dropdown-item" href="javascript:void(0)" onclick="quickUpdateAppointmentStatus('${safeId}', 'Cancelled')"><i class="bi bi-x-circle text-danger me-2"></i> Cancel</a></li>
             <li><hr class="dropdown-divider"></li>
-            <li><a class="dropdown-item" href="javascript:void(0)" onclick="openAppointmentModal('${apt.id}')"><i class="bi bi-pencil me-2"></i> Edit Details</a></li>
+            <li><a class="dropdown-item" href="javascript:void(0)" onclick="openAppointmentModal('${safeId}')"><i class="bi bi-pencil me-2"></i> Edit Details</a></li>
           </ul>
         </div>
       </td>
@@ -1978,15 +2035,15 @@ function saveAppointmentForm(e) {
     if (!form) return;
 
     const id = (document.getElementById("appointmentIdHidden")?.value || "").trim();
-    const patientName = (document.getElementById("aptPatientNameInput")?.value || "").trim();
-    const patientPhone = (document.getElementById("aptPatientPhoneInput")?.value || "").trim();
-    const doctorName = document.getElementById("aptDoctorInput")?.value;
-    const department = document.getElementById("aptDeptInput")?.value;
-    const date = document.getElementById("aptDateInput")?.value;
-    const time = document.getElementById("aptTimeInput")?.value;
-    const type = document.getElementById("aptTypeInput")?.value || "In-Person";
-    const status = document.getElementById("aptStatusInput")?.value || "Pending";
-    const reason = (document.getElementById("aptReasonInput")?.value || "").trim();
+    const patientName = sanitizeInput((document.getElementById("aptPatientNameInput")?.value || "").trim());
+    const patientPhone = sanitizeInput((document.getElementById("aptPatientPhoneInput")?.value || "").trim());
+    const doctorName = sanitizeInput(document.getElementById("aptDoctorInput")?.value);
+    const department = sanitizeInput(document.getElementById("aptDeptInput")?.value);
+    const date = sanitizeInput(document.getElementById("aptDateInput")?.value);
+    const time = sanitizeInput(document.getElementById("aptTimeInput")?.value);
+    const type = sanitizeInput(document.getElementById("aptTypeInput")?.value || "In-Person");
+    const status = sanitizeInput(document.getElementById("aptStatusInput")?.value || "Pending");
+    const reason = sanitizeInput((document.getElementById("aptReasonInput")?.value || "").trim());
 
     if (!patientName) {
       showToast("Patient name is required for booking.", "warning");
@@ -2176,29 +2233,36 @@ function renderBillingTable() {
   }
 
   filtered.forEach(inv => {
+    const safePatient = escapeHtml(inv.patientName);
+    const safeDept = escapeHtml(inv.department);
+    const safeId = escapeHtml(inv.id);
+    const safeDate = escapeHtml(inv.date);
+    const safeMethod = escapeHtml(inv.method || 'Standard Pay');
+    const safeStatus = escapeHtml(inv.status);
     const statusClass = getStatusClass(inv.status);
+
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td><span class="fw-bold">${inv.id}</span></td>
+      <td><span class="fw-bold">${safeId}</span></td>
       <td>
-        <div class="fw-bold">${inv.patientName}</div>
-        <div class="small text-muted">${inv.department}</div>
+        <div class="fw-bold">${safePatient}</div>
+        <div class="small text-muted">${safeDept}</div>
       </td>
-      <td>${inv.date}</td>
+      <td>${safeDate}</td>
       <td class="fw-bold text-dark">$${Number(inv.amount).toLocaleString()}.00</td>
       <td>
-        <span class="small text-secondary"><i class="bi bi-credit-card me-1"></i> ${inv.method || 'Standard Pay'}</span>
+        <span class="small text-secondary"><i class="bi bi-credit-card me-1"></i> ${safeMethod}</span>
       </td>
       <td>
-        <span class="status-badge ${statusClass}">${inv.status}</span>
+        <span class="status-badge ${statusClass}">${safeStatus}</span>
       </td>
       <td>
         <div class="d-flex gap-1">
-          <button class="btn btn-sm btn-medicare-secondary py-1 px-3" onclick="viewInvoiceModal('${inv.id}')">
+          <button class="btn btn-sm btn-medicare-secondary py-1 px-3" onclick="viewInvoiceModal('${safeId}')">
             <i class="bi bi-file-earmark-text me-1"></i> View Receipt
           </button>
           ${inv.status !== 'Paid' ? `
-            <button class="btn btn-sm btn-outline-success py-1 px-2" title="Mark as Paid" onclick="markInvoicePaid('${inv.id}')">
+            <button class="btn btn-sm btn-outline-success py-1 px-2" title="Mark as Paid" onclick="markInvoicePaid('${safeId}')">
               <i class="bi bi-check-lg"></i>
             </button>
           ` : ''}
@@ -2221,12 +2285,18 @@ function viewInvoiceModal(invoiceId) {
     { desc: "General Medical Examination & Clinical Assessment", cost: inv.amount }
   ]).map(item => `
     <tr>
-      <td class="py-2">${item.desc}</td>
+      <td class="py-2">${escapeHtml(item.desc)}</td>
       <td class="text-end py-2">$${Number(item.cost).toFixed(2)}</td>
     </tr>
   `).join("");
 
   const statusClass = getStatusClass(inv.status);
+  const safePatient = escapeHtml(inv.patientName);
+  const safeDept = escapeHtml(inv.department);
+  const safeId = escapeHtml(inv.id);
+  const safeDate = escapeHtml(inv.date);
+  const safeMethod = escapeHtml(inv.method || 'Direct');
+  const safeStatus = escapeHtml(inv.status);
 
   content.innerHTML = `
     <div class="invoice-container">
@@ -2243,18 +2313,18 @@ function viewInvoiceModal(invoiceId) {
         </div>
         <div class="text-end">
           <h5 class="fw-bold text-primary mb-1">INVOICE</h5>
-          <div class="fw-bold">${inv.id}</div>
-          <div class="small text-muted">Date: ${inv.date}</div>
-          <span class="status-badge ${statusClass} mt-2">${inv.status}</span>
+          <div class="fw-bold">${safeId}</div>
+          <div class="small text-muted">Date: ${safeDate}</div>
+          <span class="status-badge ${statusClass} mt-2">${safeStatus}</span>
         </div>
       </div>
 
       <div class="row g-3 mb-4">
         <div class="col-6">
           <div class="small text-muted text-uppercase fw-bold">Billed To</div>
-          <div class="fw-bold fs-6">${inv.patientName}</div>
-          <div class="small text-muted">Department: ${inv.department}</div>
-          <div class="small text-muted">Payment: ${inv.method || 'Direct'}</div>
+          <div class="fw-bold fs-6">${safePatient}</div>
+          <div class="small text-muted">Department: ${safeDept}</div>
+          <div class="small text-muted">Payment: ${safeMethod}</div>
         </div>
         <div class="col-6 text-end">
           <div class="small text-muted text-uppercase fw-bold">Hospital Tax ID</div>
@@ -2331,25 +2401,29 @@ function renderPublicFeaturedDoctors() {
   const featured = doctors.slice(0, 4);
 
   featured.forEach(doc => {
+    const safeName = escapeHtml(doc.name);
+    const safeDept = escapeHtml(doc.department);
+    const safeDegree = escapeHtml(doc.degree);
+
     const col = document.createElement("div");
     col.className = "col-lg-3 col-md-6";
     col.innerHTML = `
       <div class="doctor-card">
         <div class="doctor-img-wrap">
-          <img src="${doc.image}" alt="Portrait of ${doc.name}, Specialist in ${doc.department}" loading="lazy">
-          <span class="doctor-dept-pill">${doc.department}</span>
+          <img src="${doc.image}" alt="Portrait of ${safeName}, Specialist in ${safeDept}" loading="lazy">
+          <span class="doctor-dept-pill">${safeDept}</span>
         </div>
         <div class="doctor-body">
           <div>
             <div class="d-flex justify-content-between align-items-start mb-1">
-              <h5 class="doctor-name mb-0">${doc.name}</h5>
+              <h5 class="doctor-name mb-0">${safeName}</h5>
             </div>
-            <div class="doctor-sub">${doc.degree}</div>
+            <div class="doctor-sub">${safeDegree}</div>
             <div class="doctor-rating mb-3">
-              <i class="bi bi-star-fill"></i> ${doc.rating} <span class="text-muted fw-normal">(${doc.reviews} reviews)</span>
+              <i class="bi bi-star-fill"></i> ${Number(doc.rating) || 5.0} <span class="text-muted fw-normal">(${Number(doc.reviews) || 0} reviews)</span>
             </div>
           </div>
-          <button class="btn btn-medicare-secondary w-100 btn-sm" onclick="openBookAppointmentForDoctor('${doc.name}', '${doc.department}')">
+          <button class="btn btn-medicare-secondary w-100 btn-sm" onclick="openBookAppointmentForDoctor('${safeName.replace(/'/g, "\\'")}', '${safeDept.replace(/'/g, "\\'")}')">
             <i class="bi bi-calendar-event me-1"></i> Consult Specialist
           </button>
         </div>
