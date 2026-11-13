@@ -774,6 +774,15 @@ function isValidPhone(phone) {
   return digits.length >= 7 && digits.length <= 15;
 }
 
+// High-performance debounce utility for rapid input events & window resizing
+function debounce(fn, delay = 150) {
+  let timer = null;
+  return function (...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn.apply(this, args), delay);
+  };
+}
+
 // ==========================================================================
 // 5. Dashboard Stats & Calculations
 // ==========================================================================
@@ -853,6 +862,7 @@ function renderRecentAppointmentsTable() {
     return;
   }
 
+  const fragment = document.createDocumentFragment();
   recent.forEach(apt => {
     const safePatient = escapeHtml(apt.patientName);
     const safePhone = escapeHtml(apt.patientPhone || 'N/A');
@@ -892,8 +902,9 @@ function renderRecentAppointmentsTable() {
         </div>
       </td>
     `;
-    tbody.appendChild(tr);
+    fragment.appendChild(tr);
   });
+  tbody.appendChild(fragment);
 }
 
 function renderActivityFeed() {
@@ -902,6 +913,7 @@ function renderActivityFeed() {
   if (!container) return;
 
   container.innerHTML = "";
+  const fragment = document.createDocumentFragment();
   activities.forEach(act => {
     const div = document.createElement("div");
     div.className = "activity-item";
@@ -915,8 +927,9 @@ function renderActivityFeed() {
         <div class="text-muted" style="font-size: 0.75rem; margin-top: 2px;">${escapeHtml(act.time)}</div>
       </div>
     `;
-    container.appendChild(div);
+    fragment.appendChild(div);
   });
+  container.appendChild(fragment);
 }
 
 function logActivity(icon, color, title, detail) {
@@ -1245,6 +1258,7 @@ function renderPatientsTable() {
     return;
   }
 
+  const fragment = document.createDocumentFragment();
   filtered.forEach(pat => {
     const safeName = escapeHtml(pat.name);
     const safeEmail = escapeHtml(pat.email || 'No email registered');
@@ -1296,8 +1310,9 @@ function renderPatientsTable() {
         </div>
       </td>
     `;
-    tbody.appendChild(tr);
+    fragment.appendChild(tr);
   });
+  tbody.appendChild(fragment);
 }
 
 function openPatientModal(patientId = null) {
@@ -1596,6 +1611,7 @@ function renderDoctorsGrid() {
     return;
   }
 
+  const fragment = document.createDocumentFragment();
   filtered.forEach(doc => {
     const safeName = escapeHtml(doc.name);
     const safeDept = escapeHtml(doc.department);
@@ -1650,8 +1666,9 @@ function renderDoctorsGrid() {
         </div>
       </div>
     `;
-    container.appendChild(col);
+    fragment.appendChild(col);
   });
+  container.appendChild(fragment);
 }
 
 function openDoctorModal(doctorId = null) {
@@ -1889,6 +1906,7 @@ function renderAppointmentsTable() {
     return;
   }
 
+  const fragment = document.createDocumentFragment();
   filtered.forEach(apt => {
     const safePatient = escapeHtml(apt.patientName);
     const safePhone = escapeHtml(apt.patientPhone || 'No phone');
@@ -1939,8 +1957,9 @@ function renderAppointmentsTable() {
         </div>
       </td>
     `;
-    tbody.appendChild(tr);
+    fragment.appendChild(tr);
   });
+  tbody.appendChild(fragment);
 }
 
 function openAppointmentModal(appointmentId = null) {
@@ -2232,6 +2251,7 @@ function renderBillingTable() {
     return;
   }
 
+  const fragment = document.createDocumentFragment();
   filtered.forEach(inv => {
     const safePatient = escapeHtml(inv.patientName);
     const safeDept = escapeHtml(inv.department);
@@ -2269,8 +2289,9 @@ function renderBillingTable() {
         </div>
       </td>
     `;
-    tbody.appendChild(tr);
+    fragment.appendChild(tr);
   });
+  tbody.appendChild(fragment);
 }
 
 function viewInvoiceModal(invoiceId) {
@@ -2429,8 +2450,9 @@ function renderPublicFeaturedDoctors() {
         </div>
       </div>
     `;
-    container.appendChild(col);
+    fragment.appendChild(col);
   });
+  container.appendChild(fragment);
 }
 
 function handlePublicContactSubmit(e) {
@@ -2594,14 +2616,15 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Resize listener to re-draw canvas charts sharply
-  window.addEventListener("resize", () => {
+  // Optimized debounced resize listener for crisp chart rendering
+  const handleOptimizedResize = debounce(() => {
     if (currentPortalTab === "dashboard") {
       renderDashboardCharts();
     } else if (currentPortalTab === "reports") {
       renderReportsCharts();
     }
-  });
+  }, 160);
+  window.addEventListener("resize", handleOptimizedResize, { passive: true });
 
   // Global search input enter listener
   const topSearch = document.getElementById("globalSearchInput");
@@ -2627,18 +2650,25 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // Back to top button visibility toggle on scroll
+  // Optimized smooth scroll handler with requestAnimationFrame
   const backToTopBtn = document.getElementById("btnBackToTop");
   if (backToTopBtn) {
+    let scrollTicking = false;
     window.addEventListener("scroll", () => {
-      if (window.scrollY > 350) {
-        backToTopBtn.style.opacity = "0.95";
-        backToTopBtn.style.pointerEvents = "auto";
-      } else {
-        backToTopBtn.style.opacity = "0";
-        backToTopBtn.style.pointerEvents = "none";
+      if (!scrollTicking) {
+        window.requestAnimationFrame(() => {
+          if (window.scrollY > 350) {
+            backToTopBtn.style.opacity = "0.95";
+            backToTopBtn.style.pointerEvents = "auto";
+          } else {
+            backToTopBtn.style.opacity = "0";
+            backToTopBtn.style.pointerEvents = "none";
+          }
+          scrollTicking = false;
+        });
+        scrollTicking = true;
       }
-    });
+    }, { passive: true });
   }
 });
 
