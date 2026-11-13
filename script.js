@@ -739,6 +739,64 @@ function showToast(message, type = "success") {
   }, 4000);
 }
 
+// ==========================================================================
+// Centralized Error Handling & Diagnostics Logger
+// ==========================================================================
+const ErrorLogger = {
+  _logs: [],
+  maxLogs: 100,
+
+  log(error, context = "General", userMessage = null) {
+    const timestamp = new Date().toISOString();
+    const entry = {
+      timestamp,
+      context,
+      message: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : null
+    };
+
+    this._logs.unshift(entry);
+    if (this._logs.length > this.maxLogs) {
+      this._logs.pop();
+    }
+
+    console.error(`[MediCare Diagnostic Log] [${context}]`, {
+      time: timestamp,
+      context,
+      details: entry.message,
+      stack: entry.stack,
+      rawError: error
+    });
+
+    if (userMessage) {
+      showToast(userMessage, "error");
+    }
+
+    return entry;
+  },
+
+  warn(message, context = "General") {
+    console.warn(`[MediCare Diagnostic Warning] [${context}]`, message);
+  },
+
+  getHistory() {
+    return [...this._logs];
+  },
+
+  clearHistory() {
+    this._logs = [];
+  }
+};
+
+// Global uncaught errors and unhandled promise rejections
+window.addEventListener("error", (event) => {
+  ErrorLogger.log(event.error || event.message, "WindowUncaughtError", "An unexpected interface error occurred. Please refresh or retry.");
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+  ErrorLogger.log(event.reason, "PromiseUnhandledRejection");
+});
+
 // --------------------------------------------------------------------------
 // Form Validation & Secure Input Helpers (XSS Prevention)
 // --------------------------------------------------------------------------
@@ -976,8 +1034,12 @@ function getStatusClass(status) {
 // 6. Pure HTML5 Canvas Interactive Charts (No external libraries!)
 // ==========================================================================
 function renderDashboardCharts() {
-  renderWeeklyChart();
-  renderDepartmentDonut();
+  try {
+    renderWeeklyChart();
+    renderDepartmentDonut();
+  } catch (err) {
+    ErrorLogger.log(err, "RenderDashboardCharts");
+  }
 }
 
 function renderWeeklyChart() {
@@ -1111,10 +1173,11 @@ function renderDepartmentDonut() {
 }
 
 function renderReportsCharts() {
-  const canvas = document.getElementById("revenueTrendChart");
-  if (!canvas) return;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return;
+  try {
+    const canvas = document.getElementById("revenueTrendChart");
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
 
   const rect = canvas.getBoundingClientRect();
   const dpr = window.devicePixelRatio || 1;
@@ -1199,6 +1262,9 @@ function renderReportsCharts() {
     ctx.textAlign = "center";
     ctx.fillText(months[idx], p.x, h - 10);
   });
+  } catch (err) {
+    ErrorLogger.log(err, "RenderReportsCharts");
+  }
 }
 
 function roundRect(ctx, x, y, width, height, radius) {
@@ -1490,8 +1556,7 @@ function savePatientForm(e) {
     updateDashboardStats();
     setTimeout(() => SubmissionLock.release("patientForm", submitBtn), 500);
   } catch (err) {
-    console.error("Error saving patient:", err);
-    showToast("An unexpected error occurred while saving the patient record.", "error");
+    ErrorLogger.log(err, "SavePatientForm", "An unexpected error occurred while saving the patient record. Please check details and try again.");
   }
 }
 
@@ -1842,8 +1907,7 @@ function saveDoctorForm(e) {
     updateDashboardStats();
     setTimeout(() => SubmissionLock.release("doctorForm", submitBtn), 500);
   } catch (err) {
-    console.error("Error saving doctor:", err);
-    showToast("An unexpected error occurred while saving the doctor profile.", "error");
+    ErrorLogger.log(err, "SaveDoctorForm", "An unexpected error occurred while saving the doctor profile. Please verify details and try again.");
   }
 }
 
@@ -2182,8 +2246,7 @@ function saveAppointmentForm(e) {
     updateDashboardStats();
     setTimeout(() => SubmissionLock.release("appointmentForm", submitBtn), 500);
   } catch (err) {
-    console.error("Error saving appointment:", err);
-    showToast("An unexpected error occurred while saving the appointment.", "error");
+    ErrorLogger.log(err, "SaveAppointmentForm", "An unexpected error occurred while confirming the appointment. Please try again.");
   }
 }
 
@@ -2515,8 +2578,7 @@ function handlePublicContactSubmit(e) {
     form.classList.remove("was-validated");
     setTimeout(() => SubmissionLock.release("publicContactForm", submitBtn), 1000);
   } catch (err) {
-    console.error("Error handling contact submission:", err);
-    showToast("An unexpected error occurred while sending your inquiry. Please try again.", "error");
+    ErrorLogger.log(err, "ContactSubmission", "An unexpected error occurred while sending your inquiry. Please try again.");
   }
 }
 
@@ -2525,8 +2587,7 @@ function handleSaveSettings(e) {
   try {
     showToast("Hospital configurations and profile settings updated successfully!");
   } catch (err) {
-    console.error("Error saving settings:", err);
-    showToast("Failed to save settings.", "error");
+    ErrorLogger.log(err, "SaveSettings", "Failed to update hospital settings.");
   }
 }
 
