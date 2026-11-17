@@ -1,3 +1,4 @@
+
 package com.medicare.service;
 
 import com.medicare.dto.PatientDto;
@@ -25,6 +26,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 class PatientServiceTest {
+
     private PatientRepository patientRepository;
     private PatientService patientService;
     private DoctorRepository doctorRepository;
@@ -35,16 +37,28 @@ class PatientServiceTest {
         ActivityRepository activityRepository = mock(ActivityRepository.class);
         doctorRepository = mock(DoctorRepository.class);
         UserRepository userRepository = mock(UserRepository.class);
-        patientService = new PatientService(patientRepository, activityRepository, doctorRepository, userRepository);
+
+        patientService = new PatientService(
+                patientRepository,
+                activityRepository,
+                doctorRepository,
+                userRepository
+        );
     }
 
     @Test
     void filtersPatientRecordsWithoutUsingBrowserSeedData() {
-        Patient patient = new Patient(1L, "PAT-001", "Test Patient", 48, "Female", "O+",
-                "555-0100", null, "Hypertension", "Dr. Test Doctor", "Admitted", "Test address", LocalDate.now());
+        Patient patient = new Patient(
+                1L, "PAT-001", "Test Patient", 48, "Female", "O+",
+                "555-0100", null, "Hypertension", "Dr. Test Doctor",
+                "Admitted", "Test address", LocalDate.now()
+        );
+
         when(patientRepository.findAll()).thenReturn(List.of(patient));
 
-        List<PatientDto> patients = patientService.getAll("hypertension", null, null);
+        List<PatientDto> patients =
+                patientService.getAll("hypertension", null, null);
+
         assertEquals(1, patients.size());
         assertEquals("Test Patient", patients.get(0).getName());
     }
@@ -52,10 +66,18 @@ class PatientServiceTest {
     @Test
     void persistsNewPatientAndLinksTheSelectedDoctor() {
         when(patientRepository.count()).thenReturn(0L);
-        Doctor doctor = new Doctor(1L, "DOC-101", "Dr. Test Doctor", "MD", "Cardiology", 5,
-                BigDecimal.valueOf(100), null, null, "Available", BigDecimal.valueOf(4.5), 1, null, null);
-        when(doctorRepository.findByNameIgnoreCase("Dr. Test Doctor")).thenReturn(Optional.of(doctor));
-        when(patientRepository.save(any(Patient.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        Doctor doctor = new Doctor(
+                1L, "DOC-101", "Dr. Test Doctor", "MD", "Cardiology", 5,
+                BigDecimal.valueOf(100), null, null, "Available",
+                BigDecimal.valueOf(4.5), 1, null, null
+        );
+
+        when(doctorRepository.findByNameIgnoreCase("Dr. Test Doctor"))
+                .thenReturn(Optional.of(doctor));
+
+        when(patientRepository.save(any(Patient.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
 
         PatientDto request = new PatientDto();
         request.setName("New Test Patient");
@@ -65,6 +87,7 @@ class PatientServiceTest {
         request.setDoctor("Dr. Test Doctor");
 
         PatientDto saved = patientService.save(request);
+
         assertNotNull(saved.getId());
         assertTrue(saved.getId().startsWith("PAT-"));
         assertEquals("Dr. Test Doctor", saved.getDoctor());
@@ -72,7 +95,36 @@ class PatientServiceTest {
 
     @Test
     void missingPatientIsNotReturned() {
-        when(patientRepository.findByPatientIdIgnoreCase("PAT-9999")).thenReturn(Optional.empty());
-        assertThrows(ResourceNotFoundException.class, () -> patientService.getById("PAT-9999"));
+        when(patientRepository.findByPatientIdIgnoreCase("PAT-9999"))
+                .thenReturn(Optional.empty());
+
+        assertThrows(
+                ResourceNotFoundException.class,
+                () -> patientService.getById("PAT-9999")
+        );
+    }
+
+    @Test
+    void rejectsPatientRegistrationWhenSelectedDoctorDoesNotExist() {
+        when(patientRepository.count()).thenReturn(0L);
+
+        when(doctorRepository.findByNameIgnoreCase("Unknown Doctor"))
+                .thenReturn(Optional.empty());
+
+        PatientDto request = new PatientDto();
+        request.setName("Test Patient");
+        request.setAge(30);
+        request.setGender("Female");
+        request.setDoctor("Unknown Doctor");
+
+        ResourceNotFoundException exception = assertThrows(
+                ResourceNotFoundException.class,
+                () -> patientService.save(request)
+        );
+
+        assertEquals(
+                "The selected doctor profile was not found.",
+                exception.getMessage()
+        );
     }
 }
