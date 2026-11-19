@@ -57,3 +57,4 @@
 - PR #57 `[FEAT]` add quick action button to reschedule appointments | Verified: 2026-11-19 11:33:44
 - PR #58 `[FIX]` trim whitespace from patient search queries | Verified: 2026-11-19 11:34:03
 - PR #59 `[TEST]` add unit tests for prescription dosage frequency calculation | Verified: 2026-11-19 11:34:21
+- PR #61 `[DOCS]` add security guidelines for handling patient PHI data | Verified: 2026-11-19 11:35:16
